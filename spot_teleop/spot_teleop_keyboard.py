@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
+
 import rclpy
 from rclpy.node import Node
-
 from spot_msgs.msg import GaitInput
+from std_msgs.msg import String
 
 import sys, select, termios, tty
-
 
 msg = """
 Reading from the keyboard  and Publishing to Twist!
@@ -23,7 +24,9 @@ e/c : increase/decrease only angular speed by 10%
 a/s : roll
 d/f : pitch
 g/h : yaw
+
 CTRL-C to quit
+r/t/y/u : stand up/sit down/sleep/handshake
 """
 
 moveBindings = {
@@ -65,6 +68,13 @@ xyzBindings = {
     '6': (0, 0, -0.01),
 }
 
+movements = {
+    'r': 'stand',
+    't': 'sit',
+    'y': 'sleep',
+    'u': 'hand',
+}
+
 def getKey(settings):
     tty.setraw(sys.stdin.fileno())
     # sys.stdin.read() returns a string on Linux
@@ -77,16 +87,13 @@ def saveTerminalSettings():
         return None
     return termios.tcgetattr(sys.stdin)
 
-
 def restoreTerminalSettings(old_settings):
     if sys.platform == 'win32':
         return
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
-
 def vels(speed, turn):
     return 'currently:\tspeed %s\tturn %s ' % (speed, turn)
-
 
 def status_def(status):
     if (status == 14):
@@ -118,7 +125,12 @@ class TeleopClass(Node):
         super().__init__('teleop_twist_keyboard')
         spot_name = "Spot"
 
-        self.pub = self.create_publisher(GaitInput, '/' + spot_name + '/inverse_gait_input', 10)
+        self.pub_gait = self.create_publisher(GaitInput, '/' + spot_name + '/inverse_gait_input', 10)
+        self.gait_msg = GaitInput()
+
+        self.pub_movements = self.create_publisher(String, '/' + spot_name + '/transcript', 1)
+        self.movements_msg = String()
+
         self.create_timer(0.1, self.mytimercallback)
 
         self.settings = settings
@@ -140,13 +152,9 @@ class TeleopClass(Node):
         self.YawControl = YawControl
         self.YawControlOn = YawControlOn
         self.status = status
-
-        spot_name = "Spot"
-        self.pub = self.create_publisher(GaitInput, '/' + spot_name + '/inverse_gait_input', 10)
-        self.gait_msg = GaitInput()
+        self.movements = False
 
     def mytimercallback(self):
-
         speed = 1.0
         turn = 0.5
 
@@ -180,6 +188,10 @@ class TeleopClass(Node):
             self.z += xyzBindings[key][2]
             print("currently:\tx %s\ty %s\tz %s " % (self.x, self.y, self.z))
             self.status = status_def(self.status)
+        elif key in movements:
+            self.movements = True
+            self.movements_msg.data = movements[key]
+            self.pub_movements.publish(self.movements_msg)
         else:
             # Skip updating cmd_vel if key timeout and robot already
             # stopped.
@@ -192,37 +204,33 @@ class TeleopClass(Node):
             self.pitch = 0.0
             self.yaw = 0.0
             self.StepDirection = 0
-            # self.LateralFraction = 0.0
-            # self.YawRate = 0.0
-            # self.StepVelocity = 0.0
-            # self.ClearanceHeight = 0.0
-            # self.PenetrationDepth = 0.0
-            # self.SwingPeriod = 0.0
-            # self.YawControl = 0.0
-            # self.YawControlOn = 0.0
             if key == '\x03':
-                StepLength = 0.0
+                self.StepLength = 0.0
                 exit()
             
-        self.gait_msg.x = float(self.x)
-        self.gait_msg.y = float(self.y)
-        self.gait_msg.z = float(self.z)
-        self.gait_msg.roll = float(self.roll)
-        self.gait_msg.pitch = float(self.pitch)
-        self.gait_msg.yaw = float(self.yaw)
-        self.gait_msg.step_length = float(self.StepLength * self.StepDirection * speed)
-        self.gait_msg.lateral_fraction = float(self.LateralFraction)
-        self.gait_msg.yaw_rate = float(self.YawRate * turn)
-        self.gait_msg.step_velocity = float(self.StepVelocity)
-        self.gait_msg.clearance_height = float(self.ClearanceHeight)
-        self.gait_msg.penetration_depth = float(self.PenetrationDepth)
-        self.gait_msg.swing_period = float(self.SwingPeriod)
-        self.gait_msg.yaw_control = float(self.YawControl)
-        self.gait_msg.yaw_control_on = float(self.YawControlOn)
+        self.gait_msg.x = self.x
+        self.gait_msg.y = self.y
+        self.gait_msg.z = self.z
+        self.gait_msg.roll = self.roll
+        self.gait_msg.pitch = self.pitch
+        self.gait_msg.yaw = self.yaw
+        self.gait_msg.step_length = self.StepLength * self.StepDirection * speed
+        self.gait_msg.lateral_fraction = self.LateralFraction
+        self.gait_msg.yaw_rate = self.YawRate * turn
+        self.gait_msg.step_velocity = self.StepVelocity
+        self.gait_msg.clearance_height = self.ClearanceHeight
+        self.gait_msg.penetration_depth = self.PenetrationDepth
+        self.gait_msg.swing_period = self.SwingPeriod
+        self.gait_msg.yaw_control = self.YawControl
+        self.gait_msg.yaw_control_on = self.YawControlOn
 
-        self.pub.publish(self.gait_msg)
+        if key not in movements:
+            self.movements = False
 
-        restoreTerminalSettings(self.settings)  
+        if not self.movements:
+            self.pub_gait.publish(self.gait_msg)
+
+        restoreTerminalSettings(self.settings)
 
 
 def main(args=None):
@@ -236,7 +244,6 @@ def main(args=None):
         pass
     teleop_twist_keyboard.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

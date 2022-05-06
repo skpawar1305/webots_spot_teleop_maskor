@@ -1,3 +1,5 @@
+from glob import glob
+import os
 from setuptools import setup
 
 package_name = 'spot_teleop'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'coqui_model'), glob('coqui_model/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -20,8 +23,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'spot_teleop_keyboard = spot_teleop.spot_teleop_keyboard:main',
-            'spot_teleop_sliders = spot_teleop.spot_teleop_sliders:main'
+            'spot_teleop_keyboard   = ' + package_name + '.spot_teleop_keyboard:main',
+            'spot_teleop_sliders    = ' + package_name + '.spot_teleop_sliders:main',
+            'spot_teleop_voice      = ' + package_name + '.spot_teleop_voice:main',
         ],
     },
 )
