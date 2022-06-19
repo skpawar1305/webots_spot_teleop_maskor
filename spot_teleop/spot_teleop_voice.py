@@ -12,7 +12,8 @@ wav2vec2_dir = os.path.join(get_package_share_directory('spot_teleop'), 'wav2vec
 sys.path.append(wav2vec2_dir)
 from live_asr import LiveWav2Vec2
 
-model = wav2vec2_dir + '/wav2vec2-large-960h-lv60-self'
+# model = wav2vec2_dir + '/wav2vec2-large-960h-lv60-self'
+model = 'skpawar1305/wav2vec2-base-finetuned-ks'
 
 
 class TeleopClass(Node):

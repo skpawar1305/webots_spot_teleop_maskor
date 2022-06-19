@@ -1,4 +1,5 @@
 import pyaudio
+import torch
 import webrtcvad
 from wav2vec2_inference import Wave2Vec2Inference
 import numpy as np
@@ -8,6 +9,9 @@ import time
 from sys import exit
 import contextvars
 from queue import  Queue
+
+def Int2FloatSimple(sound):
+    return torch.from_numpy(np.frombuffer(sound, dtype=np.int16).astype('float32') / 32767)
 
 
 class LiveWav2Vec2():
@@ -58,8 +62,20 @@ class LiveWav2Vec2():
                             input=True,
                             frames_per_buffer=CHUNK)
 
-        frames = b''                
-        while True:         
+        # Silero VAD
+        model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
+                                    model='silero_vad',
+                                    force_reload=False,
+                                    onnx=True)
+
+        (get_speech_timestamps,
+        save_audio,
+        read_audio,
+        VADIterator,
+        collect_chunks) = utils        
+
+        frames = b''
+        while True:
             if LiveWav2Vec2.exit_event.is_set():
                 break            
             frame = stream.read(CHUNK)
@@ -68,7 +84,11 @@ class LiveWav2Vec2():
                 frames += frame
             else:
                 if len(frames) > 1:
-                    asr_input_queue.put(frames)
+                    newsound = np.frombuffer(frames, np.int16)
+                    audio_float32 = Int2FloatSimple(newsound)                    
+                    speech_timestamps = get_speech_timestamps(audio_float32, model, sampling_rate=RATE)
+                    if(len(speech_timestamps) > 0):
+                        asr_input_queue.put(frames)
                 frames = b''
         stream.stop_stream()
         stream.close()
